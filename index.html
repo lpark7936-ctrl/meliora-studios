@@ -606,6 +606,27 @@ footer a:hover {
  .brand-name { font-size: 14px; }
  .footer-lockup { font-size: 15px; }
 }
+
+/* Meliora Studios emblem: subtle motion on hover and keyboard focus */
+.nav-emblem, .hero-emblem, .footer-emblem {
+  transition: transform 450ms cubic-bezier(.22,1,.36,1), box-shadow 450ms ease;
+  transform-origin: center;
+  will-change: transform;
+}
+.brand-lockup:hover .nav-emblem,
+.brand-lockup:focus-visible .nav-emblem,
+.hero-emblem:hover,
+.footer-lockup:hover .footer-emblem {
+  transform: translateY(-5px) rotate(7deg) scale(1.06);
+  box-shadow: 0 12px 28px rgba(163,132,74,.28);
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-emblem, .hero-emblem, .footer-emblem { transition: none; will-change: auto; }
+  .brand-lockup:hover .nav-emblem,
+  .brand-lockup:focus-visible .nav-emblem,
+  .hero-emblem:hover,
+  .footer-lockup:hover .footer-emblem { transform: none; }
+}
 </style>
 </head>
 
@@ -1006,19 +1027,23 @@ footer a:hover {
         <p><strong>05.</strong> Your finished work is delivered.</p>
 
         <p class="form-note">
-          The separate commission form prepares an email containing
-          your request. It does not store orders
-          or automatically send them.
+          Commission requests are sent to our studio inbox using the same service as Message Us. We will review your details and reply by email. No payment is taken by this form.
         </p>
 
       </div>
 
-      <form class="order-form" id="commissionForm">
+      <form class="order-form" id="commissionForm" action="https://formsubmit.co/meliorastudiosa@gmail.com" method="POST">
+        <input type="hidden" name="_subject" value="New Meliora Studios Commission Request">
+        <input type="hidden" name="_template" value="table">
+        <div class="honeypot" aria-hidden="true">
+          <label for="commissionWebsite">Leave this blank</label>
+          <input id="commissionWebsite" name="_honey" tabindex="-1" autocomplete="off">
+        </div>
 
         <label for="clientName">Your Name *</label>
         <input
           id="clientName"
-          name="clientName"
+          name="name"
           type="text"
           maxlength="100"
           placeholder="Your name or username"
@@ -1028,7 +1053,7 @@ footer a:hover {
         <label for="clientEmail">Email *</label>
         <input
           id="clientEmail"
-          name="clientEmail"
+          name="email"
           type="email"
           maxlength="150"
           placeholder="you@example.com"
@@ -1039,7 +1064,7 @@ footer a:hover {
 
         <select
           id="serviceSelect"
-          name="serviceSelect"
+          name="service"
           required
         >
 
@@ -1087,8 +1112,11 @@ footer a:hover {
 
         <div class="buttons" style="justify-content:flex-start">
 
-          <button class="btn" type="submit">
-            Prepare Email
+          <button class="btn" type="submit" id="sendCommission">
+            Send Commission Request
+          </button>
+          <button class="btn btn-outline" type="button" id="commissionEmailFallback">
+            Send via Email Instead
           </button>
 
           <button class="btn btn-outline"
@@ -1099,7 +1127,8 @@ footer a:hover {
 
         </div>
 
-        <p id="formStatus" role="status"></p>
+        <p id="formStatus" role="status" aria-live="polite"></p>
+        <p class="form-note">Your request goes to meliorastudiosa@gmail.com. Sending does not automatically approve your order; Xina and Lumy will reply to confirm the quote. If delivery fails, choose Send via Email Instead or Copy Request.</p>
 
       </form>
 
@@ -1317,36 +1346,53 @@ ${details}
 
 }
 
-form.addEventListener("submit", function(event) {
+// Commission requests use the same FormSubmit AJAX method as Message Us.
+// This sends the submitted fields to the business inbox, without launching an email app.
+const commissionButton = document.getElementById("sendCommission");
 
-  event.preventDefault();
+function commissionMailto() {
+  const subject = encodeURIComponent("Meliora Studios Commission - " + document.getElementById("serviceSelect").value);
+  const body = encodeURIComponent(buildRequest());
+  return `mailto:${BUSINESS_EMAIL}?subject=${subject}&body=${body}`;
+}
 
+document.getElementById("commissionEmailFallback").addEventListener("click", () => {
   if (!form.reportValidity()) return;
+  window.location.href = commissionMailto();
+  formStatus.textContent = "Your email application should open. Click Send there to deliver your commission request.";
+});
 
-  if (BUSINESS_EMAIL.includes("YOUR_BUSINESS_EMAIL")) {
-
-    formStatus.textContent =
-      "Business email is not configured yet. Please use Copy Request.";
-
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!form.reportValidity()) return;
+  if (location.protocol === "file:") {
+    formStatus.textContent = "Please open the published GitHub Pages website to submit commissions. You can also use Send via Email Instead.";
     return;
   }
-
-  const service = document.getElementById("serviceSelect").value;
-
-  const subject = encodeURIComponent(
-    "Meliora Studios Commission - " + service
-  );
-
-  const body = encodeURIComponent(buildRequest());
-
-  const mailto =
-    `mailto:${BUSINESS_EMAIL}?subject=${subject}&body=${body}`;
-
-  window.location.href = mailto;
-
-  formStatus.textContent =
-    "Your email application should open. Please send the prepared email.";
-
+  commissionButton.disabled = true;
+  commissionButton.textContent = "Sending…";
+  formStatus.textContent = "Sending your commission request…";
+  try {
+    const payload = new FormData(form);
+    const response = await fetch("https://formsubmit.co/ajax/" + encodeURIComponent(BUSINESS_EMAIL), {
+      method: "POST",
+      body: payload,
+      headers: { "Accept": "application/json" }
+    });
+    const data = await response.json();
+    if (response.ok && (data.success === "true" || data.success === true)) {
+      formStatus.textContent = "Your commission request was accepted by the message service! Xina and Lumy will reply using the email you provided.";
+      form.reset();
+    } else {
+      const explanation = typeof data.message === "string" ? data.message : "The message service rejected the request.";
+      formStatus.textContent = explanation + " Try Send via Email Instead or Copy Request.";
+    }
+  } catch (error) {
+    formStatus.textContent = "The commission service could not be reached. Try Send via Email Instead or Copy Request.";
+  } finally {
+    commissionButton.disabled = false;
+    commissionButton.textContent = "Send Commission Request";
+  }
 });
 
 // ==================================
