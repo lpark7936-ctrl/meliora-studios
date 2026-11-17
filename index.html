@@ -1112,6 +1112,7 @@ footer a:hover {
       </div>
 
       <form id="contactForm" class="order-form" action="https://formsubmit.co/meliorastudiosa@gmail.com" method="POST">
+        <input type="hidden" name="_url" value="https://lpark7936-ctrl.github.io/meliora-studios/">
         <input type="hidden" name="_subject" value="New Meliora Studios Website Message">
         <input type="hidden" name="_template" value="table">
         <div class="honeypot" aria-hidden="true">
@@ -1139,8 +1140,9 @@ footer a:hover {
         <textarea id="contactMessage" name="message" maxlength="3000" minlength="5" placeholder="Write your message to Xina and Lumy here..." required></textarea>
 
         <button class="btn" type="submit" id="sendMessage">Send Message</button>
+        <button class="btn btn-outline" type="button" id="sendEmailFallback">Send via Email Instead</button>
         <p id="contactStatus" role="status" aria-live="polite"></p>
-        <p class="form-note">Sending opens a FormSubmit confirmation page. The first submission requires email activation. Do not include sensitive details.</p>
+        <p class="form-note">Messages use FormSubmit, which requires activation of the business inbox. If the service rejects your message, use the email option. Never share passwords or sensitive data.</p>
       </form>
     </div>
   </div>
@@ -1328,6 +1330,65 @@ form.addEventListener("submit", function(event) {
   formStatus.textContent =
     "Your email application should open. Please send the prepared email.";
 
+});
+
+// ==================================
+// CONTACT: visible errors + email fallback
+// ==================================
+
+const contactForm = document.getElementById("contactForm");
+const contactStatus = document.getElementById("contactStatus");
+const sendMessageButton = document.getElementById("sendMessage");
+
+function contactMailto() {
+  const name = document.getElementById("contactName").value.trim();
+  const email = document.getElementById("contactEmail").value.trim();
+  const topic = document.getElementById("contactSubject").value;
+  const message = document.getElementById("contactMessage").value.trim();
+  const subject = encodeURIComponent("Meliora Studios: " + topic);
+  const body = encodeURIComponent(`From: ${name}\nReply to: ${email}\nTopic: ${topic}\n\n${message}`);
+  return `mailto:${BUSINESS_EMAIL}?subject=${subject}&body=${body}`;
+}
+
+document.getElementById("sendEmailFallback").addEventListener("click", () => {
+  if (!contactForm.reportValidity()) return;
+  window.location.href = contactMailto();
+  contactStatus.textContent = "Your email application should open. You must click Send there to deliver the message.";
+});
+
+contactForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!contactForm.reportValidity()) return;
+  if (location.protocol === "file:") {
+    contactStatus.textContent = "Open the published GitHub Pages website to send messages, not the HTML file on your computer. You can also use Send via Email Instead.";
+    return;
+  }
+  sendMessageButton.disabled = true;
+  sendMessageButton.textContent = "Sending…";
+  contactStatus.textContent = "Contacting message service…";
+  try {
+    const payload = new FormData(contactForm);
+    // Send from the published website using FormSubmit's documented AJAX endpoint.
+    const response = await fetch("https://formsubmit.co/ajax/" + encodeURIComponent(BUSINESS_EMAIL), {
+      method: "POST",
+      body: payload,
+      headers: { "Accept": "application/json" }
+    });
+    const data = await response.json();
+    // FormSubmit can return success as the STRING "false"; do not treat it as truthy.
+    if (response.ok && (data.success === "true" || data.success === true)) {
+      contactStatus.textContent = "FormSubmit accepted your message. Please check the business inbox for delivery.";
+      contactForm.reset();
+    } else {
+      const explanation = typeof data.message === "string" ? data.message : "The message service rejected the submission.";
+      contactStatus.textContent = explanation + " Use Send via Email Instead if needed.";
+    }
+  } catch (error) {
+    contactStatus.textContent = "The message service is unavailable or blocked. Use Send via Email Instead.";
+  } finally {
+    sendMessageButton.disabled = false;
+    sendMessageButton.textContent = "Send Message";
+  }
 });
 
 // ==================================
